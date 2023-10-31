@@ -1,0 +1,120 @@
+version: "3"
+services:
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.0
+    container_name: elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - "cluster.name=alex-demo"
+      - "http.host=0.0.0.0"
+      - "transport.host=127.0.0.1"
+      - "discovery.type=single-node"
+    networks:
+      - elk
+    healthcheck:
+      test: [ 'CMD', 'curl', '-f', 'http://localhost:9200' ]
+
+#  # Logstash
+#  logstash:
+#    image: docker.elastic.co/logstash/logstash:7.15.0
+#    container_name: logstash
+#    volumes:
+#      - ./logstash-config/:/usr/share/logstash/pipeline/
+#    ports:
+#      - "5000:5000" # FIXME: incremented by one to account for local processes
+#      - "9600:9600"
+#    environment:
+#      - xpack.monitoring.enabled=true
+#    networks:
+#      - elk
+#    depends_on:
+#      elasticsearch:
+#        condition: service_healthy
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    networks:
+      - elk
+    volumes:
+        - "./kibana.yml:/usr/share/kibana/config/kibana.yml"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:7.15.0
+    container_name: apm-server
+    ports:
+      - "8200:8200"
+    networks:
+      - elk
+    volumes:
+      - "./apm-server.yml:/usr/share/apm-server/apm-server.yml"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: [ 'CMD', 'curl', '-f', 'http://localhost:8200' ]
+
+  caller:
+    build:
+      context: ./caller
+    container_name: caller
+    ports:
+      - "8080:8080"
+    environment:
+      - ELASTIC_APM_SERVER_URL=http://localhost:8200
+    depends_on:
+      - middleman
+      - receiver
+
+  middleman:
+    build:
+      context: ./middleman
+    container_name: middleman
+    ports:
+      - "8190:8190"
+    environment:
+      - ELASTIC_APM_SERVER_URL=http://localhost:8200
+    depends_on:
+      - receiver
+
+  receiver:
+    build:
+      context: ./receiver
+    container_name: receiver
+    ports:
+      - "8191:8191"
+    environment:
+      - ELASTIC_APM_SERVER_URL=http://localhost:8200
+
+#  prometheus:
+#    image: prom/prometheus
+#    volumes:
+#      - /path/to/prometheus.yml:/etc/prometheus/prometheus.yml
+#    command:
+#      - '--config.file=/etc/prometheus/prometheus.yml'
+#    ports:
+#      - "9090:9090"
+    # Other Prometheus configurations
+
+#  grafana:
+#    image: grafana/grafana
+#    ports:
+#      - "3000:3000"
+#    environment:
+#      - GF_SECURITY_ADMIN_USER=admin
+#      - GF_SECURITY_ADMIN_PASSWORD=admin
+    # Other Grafana configurations
+
+networks:
+  elk:

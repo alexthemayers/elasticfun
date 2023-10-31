@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'elk-stack'
+    static_configs:
+      - targets: ['elasticsearch:9200', 'logstash:9600', 'kibana:5601']
