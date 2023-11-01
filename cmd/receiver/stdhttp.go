@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.elastic.co/apm/module/apmhttp"
 	"io"
 	"math/rand"
 	"net/http"
@@ -30,8 +31,10 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rng", newRngHandler(logger, tracedClient, url))
 
+	tracedMux := apmhttp.Wrap(mux, apmhttp.WithTracer(tracer), apmhttp.WithPanicPropagation())
+
 	// Start the custom HTTP server
-	if err := http.ListenAndServe(listenPort, mux); !errors.Is(err, http.ErrServerClosed) {
+	if err := http.ListenAndServe(listenPort, tracedMux); !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("Error starting HTTP server", zap.Error(err))
 	}
 }

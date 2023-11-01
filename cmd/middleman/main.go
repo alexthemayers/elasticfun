@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"go.elastic.co/apm/module/apmhttp"
 	"io"
 	"net/http"
 
@@ -23,12 +24,12 @@ func main() {
 	defer logger.Sync()
 	tracedClient := observability.NewTracedClient()
 
-	receiverURL := "http://receiver:8191"
+	receiverURL := "http://localhost:8191"
 	fullUrl := fmt.Sprintf("%s/%s", receiverURL, "rng")
 	middlemanHandler := newMiddlemanHandler(tracedClient, logger, fullUrl)
 	server := &http.Server{
 		Addr:    listenPort,
-		Handler: http.HandlerFunc(middlemanHandler),
+		Handler: apmhttp.Wrap(http.HandlerFunc(middlemanHandler), apmhttp.WithTracer(tracer), apmhttp.WithPanicPropagation()),
 	}
 
 	logger.Info("Middleman service listening", zap.String("listen_port", listenPort))
