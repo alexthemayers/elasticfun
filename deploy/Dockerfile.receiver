@@ -5,10 +5,10 @@ FROM golang:1.21
 WORKDIR /app
 
 # Copy the source code into the container
-COPY . .
+COPY ../. .
 
 # Build the Receiver service binary
-RUN go build -o receiver stdhttp.go
+RUN go build -o receiver cmd/receiver/stdhttp.go
 
 # Expose the port that the service will run on
 EXPOSE 8191

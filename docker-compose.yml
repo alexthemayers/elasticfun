@@ -15,24 +15,24 @@ services:
     networks:
       - elk
     healthcheck:
-      test: [ 'CMD', 'curl', '-f', 'http://localhost:9200' ]
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
 
-#  # Logstash
-#  logstash:
-#    image: docker.elastic.co/logstash/logstash:7.15.0
-#    container_name: logstash
-#    volumes:
-#      - ./logstash-config/:/usr/share/logstash/pipeline/
-#    ports:
-#      - "5000:5000" # FIXME: incremented by one to account for local processes
-#      - "9600:9600"
-#    environment:
-#      - xpack.monitoring.enabled=true
-#    networks:
-#      - elk
-#    depends_on:
-#      elasticsearch:
-#        condition: service_healthy
+  #  # Logstash
+  #  logstash:
+  #    image: docker.elastic.co/logstash/logstash:7.15.0
+  #    container_name: logstash
+  #    volumes:
+  #      - ./logstash-config/:/usr/share/logstash/pipeline/
+  #    ports:
+  #      - "5000:5000" # FIXME: incremented by one to account for local processes
+  #      - "9600:9600"
+  #    environment:
+  #      - xpack.monitoring.enabled=true
+  #    networks:
+  #      - elk
+  #    depends_on:
+  #      elasticsearch:
+  #        condition: service_healthy
 
   # Kibana
   kibana:
@@ -45,7 +45,7 @@ services:
     networks:
       - elk
     volumes:
-        - "./kibana.yml:/usr/share/kibana/config/kibana.yml"
+      - "./kibana.yml:/usr/share/kibana/config/kibana.yml"
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -63,39 +63,48 @@ services:
       elasticsearch:
         condition: service_healthy
     healthcheck:
-      test: [ 'CMD', 'curl', '-f', 'http://localhost:8200' ]
+      test: ["CMD", "curl", "-f", "http://localhost:8200"]
 
   caller:
     build:
-      context: ./caller
+      context: .
+      dockerfile: deploy/Dockerfile.caller
     container_name: caller
     ports:
       - "8080:8080"
     environment:
       - ELASTIC_APM_SERVER_URL=http://localhost:8200
+      - ELASTIC_APM_SERVICE_NAME=caller
+      - ELASTIC_APM_ENVIRONMENT=local
     depends_on:
       - middleman
       - receiver
 
   middleman:
     build:
-      context: ./middleman
+      context: .
+      dockerfile: deploy/Dockerfile.middleman
     container_name: middleman
     ports:
       - "8190:8190"
     environment:
       - ELASTIC_APM_SERVER_URL=http://localhost:8200
+      - ELASTIC_APM_SERVICE_NAME=middleman
+      - ELASTIC_APM_ENVIRONMENT=local
     depends_on:
       - receiver
 
   receiver:
     build:
-      context: ./receiver
+      context: .
+      dockerfile: deploy/Dockerfile.receiver
     container_name: receiver
     ports:
       - "8191:8191"
     environment:
       - ELASTIC_APM_SERVER_URL=http://localhost:8200
+      - ELASTIC_APM_SERVICE_NAME=receiver
+      - ELASTIC_APM_ENVIRONMENT=local
 
 #  prometheus:
 #    image: prom/prometheus
@@ -105,7 +114,7 @@ services:
 #      - '--config.file=/etc/prometheus/prometheus.yml'
 #    ports:
 #      - "9090:9090"
-    # Other Prometheus configurations
+# Other Prometheus configurations
 
 #  grafana:
 #    image: grafana/grafana
@@ -114,7 +123,7 @@ services:
 #    environment:
 #      - GF_SECURITY_ADMIN_USER=admin
 #      - GF_SECURITY_ADMIN_PASSWORD=admin
-    # Other Grafana configurations
+# Other Grafana configurations
 
 networks:
   elk:

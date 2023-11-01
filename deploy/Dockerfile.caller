@@ -5,10 +5,10 @@ FROM golang:1.21
 WORKDIR /app
 
 # Copy the source code into the container
-COPY . .
+COPY ../. .
 
 # Build the Golang service binary
-RUN go build -o caller main.go
+RUN go build -o caller cmd/caller/main.go
 
 # Run the Golang service
 CMD ["./caller"]

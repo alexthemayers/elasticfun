@@ -1,4 +1,4 @@
-module github.com/alexthemayers/elasticfun/receiver
+module github.com/alexthemayers/elasticfun
 
 go 1.21.3
 
@@ -6,6 +6,8 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	go.elastic.co/apm v1.15.0
 	go.elastic.co/apm/module/apmgin v1.15.0
+	go.elastic.co/apm/module/apmhttp v1.15.0
+	go.elastic.co/apm/module/apmzap v1.15.0
 	go.uber.org/zap v1.26.0
 )
 
@@ -36,8 +38,6 @@ require (
 	github.com/santhosh-tekuri/jsonschema v1.2.4 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
-	go.elastic.co/apm/module/apmhttp v1.15.0 // indirect
-	go.elastic.co/apm/module/apmzap v1.15.0 // indirect
 	go.elastic.co/fastjson v1.1.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect

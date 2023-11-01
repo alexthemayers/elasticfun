@@ -2,14 +2,12 @@ package main
 
 import (
 	"fmt"
-	"go.elastic.co/apm/module/apmzap"
+	"go.elastic.co/apm"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
-	"go.elastic.co/apm"
-	"go.elastic.co/apm/module/apmhttp"
+	"github.com/alexthemayers/elasticfun/pkg/observability"
 	"go.uber.org/zap"
 )
 
@@ -20,18 +18,17 @@ const (
 )
 
 func main() {
-	logger := mustBuildNewLogger()
-	defer logger.Sync()
-
-	tracer := mustBuildNewTracer()
+	tracer := observability.MustBuildNewTracer(serviceName, serviceVersion)
 	defer tracer.Close()
+	logger := observability.MustBuildNewLogger(tracer)
+	defer logger.Sync()
+	tracedClient := observability.NewTracedClient()
 
 	// Replace with the actual URL of the second Golang service
 	serviceURL := "http://middleman:8190"
 	logger.Info("starting", zap.String("serviceURL", serviceURL), zap.Int("call_interval", callInterval))
 
-	client := newTracedClient()
-	go doWork(tracer, logger, client, serviceURL)
+	go doWork(tracer, logger, tracedClient, serviceURL)
 	select {}
 }
 
@@ -69,45 +66,4 @@ func doWork(tracer *apm.Tracer, logger *zap.Logger, client *http.Client, service
 			}
 		}
 	}
-}
-
-func newTracedClient() *http.Client {
-	return &http.Client{
-		Transport: apmhttp.WrapRoundTripper(http.DefaultTransport),
-	}
-}
-func mustBuildNewLogger() *zap.Logger {
-	//config := zap.NewProductionConfig()
-	//config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
-	//config.EncoderConfig.TimeKey = "@timestamp"
-	//logger, loggerErr := config.Build()
-	//if loggerErr != nil {
-	//	fmt.Println("Error setting up Zap logger:", loggerErr)
-	//	os.Exit(1)
-	//}
-	tracer, tracerErr := apm.NewTracerOptions(apm.TracerOptions{
-		ServiceName:        serviceName,
-		ServiceVersion:     serviceVersion,
-		ServiceEnvironment: "local",
-	})
-	if tracerErr != nil {
-		fmt.Printf("tracer init error encountered: %v\n", tracerErr)
-		os.Exit(1)
-	}
-	apmcore := &apmzap.Core{Tracer: tracer}
-	log, logErr := zap.NewProductionConfig().Build(zap.AddCaller())
-	if logErr != nil {
-		fmt.Printf("logger init error encountered: %v\n", logErr)
-		os.Exit(1)
-	}
-	logger := zap.New(log.Core(), zap.WrapCore(apmcore.WrapCore))
-	return logger
-}
-func mustBuildNewTracer() *apm.Tracer {
-	tracer, tracerErr := apm.NewTracer(serviceName, serviceVersion) // Use defaults or configure as needed
-	if tracerErr != nil {
-		fmt.Printf("Error setting up Elastic APM: %v\n", tracerErr)
-		os.Exit(1)
-	}
-	return tracer
 }

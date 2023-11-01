@@ -4,15 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.elastic.co/apm/module/apmhttp"
-	"go.elastic.co/apm/module/apmzap"
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
-	"time"
 
-	"go.elastic.co/apm"
+	"github.com/alexthemayers/elasticfun/pkg/observability"
 	"go.uber.org/zap"
 )
 
@@ -23,23 +19,16 @@ const (
 )
 
 func main() {
-	logger := mustBuildLogger()
-	defer logger.Sync()
-
-	// Set up Elastic APM
-	tracer, err := apm.NewTracer("", "") // Use defaults or configure as needed
-	if err != nil {
-		fmt.Println("Error setting up Elastic APM:", err)
-		return
-	}
+	tracer := observability.MustBuildNewTracer(serviceName, serviceVersion)
 	defer tracer.Close()
+	logger := observability.MustBuildNewLogger(tracer)
+	defer logger.Sync()
+	tracedClient := observability.NewTracedClient()
 
-	// Define an HTTP request handling function
-	rngHandler := newRNGHandler(tracer, logger)
-
+	url := "https://www.boredapi.com/api/activity"
 	// Create a custom HTTP server
 	mux := http.NewServeMux()
-	mux.HandleFunc("/rng", rngHandler)
+	mux.HandleFunc("/rng", newRngHandler(logger, tracedClient, url))
 
 	// Start the custom HTTP server
 	if err := http.ListenAndServe(listenPort, mux); !errors.Is(err, http.ErrServerClosed) {
@@ -47,13 +36,13 @@ func main() {
 	}
 }
 
-func newRNGHandler(tracer *apm.Tracer, logger *zap.Logger) func(w http.ResponseWriter, r *http.Request) {
+func newRngHandler(logger *zap.Logger, client *http.Client, url string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create a transaction for this request
-		tx := tracer.StartTransaction(serviceName, "database_retrieval")
-		defer tx.End()
-		span := tx.StartSpanOptions("hard work", "rng", apm.SpanOptions{Start: time.Now()})
-		defer span.End()
+		//tx := r.Tracer().StartTransaction(serviceName, "database_retrieval")
+		//defer tx.End()
+		//span := tx.StartSpanOptions("hard work", "rng", apm.SpanOptions{Start: time.Now()})
+		//defer span.End()
 		workResult := rand.Int()
 		if workResult%5 == 1 {
 			// fail
@@ -62,8 +51,14 @@ func newRNGHandler(tracer *apm.Tracer, logger *zap.Logger) func(w http.ResponseW
 			return
 		}
 		// succeed
-		activityUrl := "https://www.boredapi.com/api/activity"
-		resp, err := newTracedClient().Get(activityUrl)
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Error(err.Error())
+			return
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			logger.Error(err.Error())
@@ -91,35 +86,8 @@ func newRNGHandler(tracer *apm.Tracer, logger *zap.Logger) func(w http.ResponseW
 			logger.Error("could not write to reponse writer", zap.Error(writeErr))
 		}
 		logger.Info("Great success")
-	}
-}
 
-func mustBuildLogger() *zap.Logger {
-	//config := zap.NewProductionConfig()
-	//config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
-	//config.EncoderConfig.TimeKey = "@timestamp"
-	//logger, loggerErr := config.Build()
-	//if loggerErr != nil {
-	//	fmt.Println("Error setting up Zap logger:", loggerErr)
-	//	os.Exit(1)
-	//}
-	tracer, tracerErr := apm.NewTracerOptions(apm.TracerOptions{
-		ServiceName:        serviceName,
-		ServiceVersion:     serviceVersion,
-		ServiceEnvironment: "local",
-	})
-	if tracerErr != nil {
-		fmt.Printf("tracer init error encountered: %v\n", tracerErr)
-		os.Exit(1)
 	}
-	apmcore := &apmzap.Core{Tracer: tracer}
-	log, logErr := zap.NewProductionConfig().Build(zap.AddCaller())
-	if logErr != nil {
-		fmt.Printf("logger init error encountered: %v\n", logErr)
-		os.Exit(1)
-	}
-	logger := zap.New(log.Core(), zap.WrapCore(apmcore.WrapCore))
-	return logger
 }
 
 type Activity struct {
@@ -130,10 +98,4 @@ type Activity struct {
 	Link          string  `json:"link"`
 	Key           string  `json:"key"`
 	Accessibility float64 `json:"accessibility"`
-}
-
-func newTracedClient() *http.Client {
-	return &http.Client{
-		Transport: apmhttp.WrapRoundTripper(http.DefaultTransport),
-	}
 }
