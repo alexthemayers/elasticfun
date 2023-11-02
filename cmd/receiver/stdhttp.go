@@ -1,24 +1,25 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/alexthemayers/elasticfun/cmd/receiver/testdata"
 	"github.com/alexthemayers/elasticfun/pkg/observability"
 	"github.com/gin-gonic/gin"
 	"go.elastic.co/apm/module/apmgin"
 	"go.elastic.co/apm/module/apmhttp"
 	"go.uber.org/zap"
-	"io"
 	"math/rand"
 	"net/http"
+	"time"
 )
 
 const (
 	serviceName    = "receiver"
 	serviceVersion = "0.0.1"
 	listenPort     = ":8191"
+	maxLatency     = 1000 // milliseconds
 )
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	if true {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rng", newRngHandler(logger, tracedClient, url))
+		mux.HandleFunc("/delay", newDelayHandler(logger))
 
 		tracedMux := apmhttp.Wrap(mux, apmhttp.WithTracer(tracer), apmhttp.WithPanicPropagation())
 
@@ -54,7 +56,7 @@ func main() {
 
 func newRngGinHandler(logger *zap.Logger, client *http.Client, url string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		data, err := doWork(c.Request.Context(), client, url)
+		data, err := testdata.CallExternalApi(c.Request.Context(), client, url)
 		if err != nil {
 			c.Error(err)
 			c.JSON(http.StatusInternalServerError, nil)
@@ -69,7 +71,7 @@ func newRngGinHandler(logger *zap.Logger, client *http.Client, url string) gin.H
 
 func newRngHandler(logger *zap.Logger, client *http.Client, url string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		testData, err := doWork(r.Context(), client, url)
+		testData, err := testdata.CallExternalApi(r.Context(), client, url)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			logger.Error("could not do work", zap.Error(err))
@@ -90,47 +92,16 @@ func newRngHandler(logger *zap.Logger, client *http.Client, url string) http.Han
 		logger.Info("Great success")
 	}
 }
-
-func doWork(ctx context.Context, client *http.Client, url string) (TestData, error) {
-	workResult := rand.Int()
-	if workResult%5 == 1 {
-		// fail
-		return TestData{}, fmt.Errorf("failure to do work")
+func newDelayHandler(logger *zap.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		delay := time.Duration(rand.Int63n(maxLatency) * int64(time.Millisecond))
+		time.Sleep(delay)
+		_, writeErr := w.Write([]byte(fmt.Sprintf(`{"delay":%d}`, delay)))
+		if writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
 	}
-	// succeed
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return TestData{}, fmt.Errorf("failure to make api call: %w", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return TestData{}, fmt.Errorf("failure to make api call: %w", err)
-	}
-	defer resp.Body.Close()
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return TestData{}, fmt.Errorf("failure to make api call: %w", err)
-	}
-	var activityStruct Activity
-	err = json.Unmarshal(bodyBytes, &activityStruct)
-	if err != nil {
-		return TestData{}, fmt.Errorf("failure to make api call: %w", err)
-	}
-	return TestData{Activity: activityStruct.Activity, RandomNumber: workResult}, nil
-}
-
-type Activity struct {
-	Activity      string  `json:"activity"`
-	Type          string  `json:"type"`
-	Participants  int     `json:"participants"`
-	Price         float64 `json:"price"`
-	Link          string  `json:"link"`
-	Key           string  `json:"key"`
-	Accessibility float64 `json:"accessibility"`
-}
-
-type TestData struct {
-	Activity     string `json:"activity"`
-	RandomNumber int    `json:"random_number"`
 }
